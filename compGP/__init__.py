@@ -1,0 +1,1 @@
+from BaseModel import W,S
