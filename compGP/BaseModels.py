@@ -1,9 +1,5 @@
 import numpy as np
-from ModelClass import Model
-
-class BaseModel(Model):
-
-	indices=[[0]]
+from Model import BaseModel
 
 class W(BaseModel):
 	mean_hyper_id=['constant']

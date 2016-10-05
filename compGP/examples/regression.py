@@ -5,9 +5,10 @@ X=np.random.uniform(-3.,3.,(20,1))
 Y=np.sin(X)+np.random.randn(20,1)*0.05
 testX=np.linspace(-3,3)[None].T
 
-s=compGP.S([0,1,1])
+SW=S+W
 
-s.optimize(X,Y)
+s=compGP.S([0,1,1])
+#s.optimize(X,Y)
 
 prior=s.prior(testX)
 prior.plot_samples(nsamples=10)
