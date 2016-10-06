@@ -12,17 +12,13 @@ class W(BaseModel):
 		return np.ones(x.shape)*self.hyper_map['constant']
 
 	def covf(self,x1,x2,summed=True):
-		mat=x1*x2.T
-		if 1 in mat.shape:
-			return np.ones(mat.shape)*self.hyper_map['variance']
-		else:
-			return np.identity(np.sqrt(mat.size))*self.hyper_map['variance']
+		return np.array([[self.hyper_map['variance'] if xi==xj else 0 for xi in x1] for xj in x2]).T[0]
 
 	def df_meanf(self,x,summed=True):
 		return [np.zeros(x.shape)]
 
 	def df_covf(self,x1,x2,summed=True):
-		return [np.zeros((x1*x1.T).shape)]
+		return [np.zeros((x1.size,x2.size))]
 
 class S(BaseModel):
 	mean_hyper_id=['constant']
