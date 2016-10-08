@@ -54,3 +54,30 @@ class Normal:
 			plt.plot(train[0],train[1],'ro')
 		if show==True:
 			plt.show()
+
+class NormalMix:
+
+	def __init__(self,components):
+		self.components=components
+
+	def plot_samples(self,summed=True,nsamples=1,train=None):
+		if summed==True:
+			components=[self.components[-1]]
+		else:
+			components=self.components[:-1]
+		colormap=['b','g','orange','pink','purple']
+		for i in xrange(len(components)):
+			color=colormap[i]
+			components[i].plot_samples(nsamples=nsamples,show=False,color=color,train=train)
+		plt.show()
+
+	def plot_mean(self,summed=True,train=None):
+		if summed==True:
+			components=[self.components[-1]]
+		else:
+			components=self.components[:-1]
+		colormap=['b','g','orange','pink','purple']
+		for i in xrange(len(components)):
+			color=colormap[i]
+			components[i].plot_mean(show=False,train=train)
+		plt.show()

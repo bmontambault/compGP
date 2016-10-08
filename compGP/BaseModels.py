@@ -12,7 +12,7 @@ class W(BaseModel):
 		return np.ones(x.shape)*self.hyper_map['constant']
 
 	def covf(self,x1,x2,summed=True):
-		return np.array([[self.hyper_map['variance'] if xi==xj else 0 for xi in x1] for xj in x2]).T[0]
+		return np.array([[self.hyper_map['variance'] if xi==xj else 0 for xi in x1] for xj in x2]).T
 
 	def df_meanf(self,x,summed=True):
 		return [np.zeros(x.shape)]

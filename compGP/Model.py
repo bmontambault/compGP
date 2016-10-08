@@ -1,7 +1,7 @@
 import numpy as np
 from scipy import optimize
 import linalg
-from Distributions import Normal
+from Distributions import Normal,NormalMix
 
 class BaseModel(object):
 
@@ -12,7 +12,7 @@ class BaseModel(object):
 	df_K={}
 	m={}
 	log_transformation={'constant':False,'slope':False,'variance':True,'lengthscale':True}
-	defaults={'constant':0,'slope':0,'variance':1,'lengthscale':1}
+	defaults={'constant':0,'slope':0,'varianlce':1,'lengthscale':1}
 
 	def __init__(self,hyperparams=None,fix_mean=False,log=False):
 		self.update_hyperparams(hyperparams=hyperparams,fix_mean=fix_mean,log=log)
@@ -45,29 +45,35 @@ class BaseModel(object):
 	def set_vars(self,x,summed=True):
 		key=(tuple(np.ravel(x)),tuple(self.hyper_map.items()))
 		if key not in self.K:
-			K=self.covf(x,x,summed=summed)
-			self.K[key],self.inv_K[key]=linalg.jit_inv(K)
-			self.log_det_K[key]=np.linalg.slogdet(self.K[key])[1]
-			self.df_K[key]=self.df_covf(x,x,summed=summed)
-			self.m[key]=self.meanf(x,summed=summed)
+			self.m[key]=self.meanf(x)
+			self.K[key]=self.covf(x,x)
+			self.df_K[key]=self.df_covf(x,x)
+			self.m[key].append(sum(self.m[key]))
+			self.df_K[key].append(d for f in self.df_K[key])
+			self.K[key],self.inv_K[key]=linalg.jit_inv(self.K[key])
+			self.log_det_K[key]=[np.linalg.slogdet(K)[1] for K in self.K[key]]
 		return key
 
-	def prior(self,x,summed=True):
-		key=self.set_vars(x,summed=summed)
-		if summed==True:
-			return Normal(x,self.m[key],self.K[key],self.log_det_K[key],self.inv_K[key],self.df_K[key])
+	def prior(self,x):
+		key=self.set_vars(x)
+		return NormalMix([Normal(x,self.m[key][i],self.K[key][i],self.log_det_K[key][i],self.inv_K[key][i],self.df_K[key][i]) for i in xrange(len(self.m[key]))])
 
-	def posterior(self,x,y,testx,summed=True):
-		key=self.set_vars(x,summed=summed)
-		m,log_det_K,inv_K=self.m[key],self.log_det_K[key],self.inv_K[key]
-		k=[self.covf(x_,x,summed=summed) for x_ in testx]
-		kk=[self.covf(x_,x_,summed=summed) for x_ in testx]
-		mx=[self.meanf(x_,summed=summed) for x_ in testx]
+	def posterior(self,x,y,testx):
+		key=self.set_vars(x)
+		m=self.m[key]
+		inv_K=self.inv_K[key]
+		log_det_K=self.log_det_K[key]
+		k=zip(*[self.covf(x_,x) for x_ in testx])
+		kk=zip(*[self.covf(x_,x_) for x_ in testx])
+		mx=zip(*[self.meanf(x_) for x_ in testx])
+		k.append([sum(ki) for ki in zip(*k)])
+		kk.append([sum(kki) for kki in zip(*kk)])
+		mx.append([sum(mxi) for mxi in zip(*mx)])
 
-		if summed==True:
-			mean=np.array([np.sum(k[i]*inv_K*(y-m))+np.sum(mx[i]) for i in xrange(len(k))])[None].T
-			var=np.array([np.sum(kk[i]-np.sum(k[i]*inv_K*k[i].T)) for i in xrange(len(k))])[None].T
-			return Normal(testx,mean,var)
+		mean=[np.array([np.sum(k[i][j]*inv_K[i]*(y-m[i]))+np.sum(mx[i][j]) for j in xrange(len(k[i]))])[None].T for i in xrange(len(m))]
+		var=[np.array([np.sum(kk[i][j]-np.sum(k[i][j]*inv_K[i]*k[i][j].T)) for j in xrange(len(k[i]))])[None].T for i in xrange(len(m))]
+		return NormalMix([Normal(testx,mean[i],var[i]) for i in xrange(len(self.parameterized_components)+1)])
+
 
 	def f_df(self,x0,x,y):
 		self.update_hyperparams(x0,log=True,fix_mean=True)
@@ -101,28 +107,14 @@ class CompModel(BaseModel):
 					parameterized_component=parameterized_map[self.indexed_components[i][j]]
 				self.parameterized_components[-1].append(parameterized_component)
 
-	def meanf(self,x,summed=True):
-		products=[reduce(np.multiply,[c.meanf(x) for c in prod],1) for prod in self.parameterized_components]
-		if summed==True:
-			return sum(products)
-		else:
-			return products
+	def meanf(self,x):
+		return [reduce(np.multiply,[c.meanf(x) for c in prod],1) for prod in self.parameterized_components]
 
-	def covf(self,x1,x2,summed=True):
-		products=[reduce(np.multiply,[c.covf(x1,x2) for c in prod],1) for prod in self.parameterized_components]
-		if summed==True:
-			return sum(products)
-		else:
-			return products
+	def covf(self,x1,x2):
+		return [reduce(np.multiply,[c.covf(x1,x2) for c in prod],1) for prod in self.parameterized_components]
 
-	def df_meanf(self,x,summed=True):
-		if summed==True:
-			return [d for f in [c.df_meanf(x) for c in list(set([e for g in self.parameterized_components for e in g]))] for d in f]
-		else:
-			return [d for f in [[c.df_meanf(x) for c in prod] for prod in self.parameterized_components] for d in f]
+	def df_meanf(self):
+		return [d for f in [[c.df_meanf(x) for c in prod] for prod in self.parameterized_components] for d in f]
 
-	def df_covf(self,x1,x2,summed=True):
-		if summed==True:
-			return [d for f in [c.df_covf(x1,x2) for c in list(set([e for g in self.parameterized_components for e in g]))] for d in f]
-		else:
-			return [d for f in [[c.df_covf(x1,x2) for c in prod] for prod in self.parameterized_components] for d in f]
+	def df_covf(self,x1,x2):
+		return [d for f in [[c.df_covf(x1,x2) for c in prod] for prod in self.parameterized_components] for d in f]
